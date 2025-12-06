@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Parts Checklist — v0.10</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      /* -------------------------
+   Layout variables and styles
+   ------------------------- */
+      :root {
+        --sheet-margin: 10mm;
+        --sticker-width: 40mm;
+        --sticker-height: 40mm;
+        --img-size: 10mm;
+        --sheet-title-size: 14px;
+      }
+
+      /* Basic page styles */
+      body {
+        font-family: "Segoe UI", Roboto, system-ui, -apple-system,
+          "Helvetica Neue", Arial;
+        margin: 0;
+        background: #f6f7f9;
+        color: #222;
+      }
+      header {
+        padding: 16px;
+        background: #fff;
+        border-bottom: 1px solid #ddd;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+        margin-top: 8px;
+      }
+      .controls label {
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      input,
+      button,
+      select {
+        padding: 6px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fff;
+      }
+      button {
+        background: #0078d4;
+        color: white;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #005a9e;
+      }
+      main {
+        padding: 12px;
+      }
+
+      /* Sheet / print layout */
+      .sheet {
+        width: 210mm;
+        height: 297mm;
+        padding: var(--sheet-margin);
+        box-sizing: border-box;
+        background: white;
+        margin: 12px auto;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+      .sheet-title {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(var(--sheet-margin) * -1);
+        text-align: center;
+        font-weight: 600;
+        font-size: var(--sheet-title-size);
+        color: #222;
+        padding-top: 4mm;
+        pointer-events: none;
+      }
+      .sheet .sheet-title-inner {
+        display: inline-block;
+        padding: 0 6px;
+      }
+      .grid {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      .sticker {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 2mm;
+        box-sizing: border-box;
+        background: #fff;
+        transition: width 0.2s, height 0.2s, left 0.2s, top 0.2s;
+      }
+      .sticker .topbar {
+        position: absolute;
+        top: 2mm;
+        right: 2mm;
+        display: flex;
+        gap: 4px;
+      }
+      .sticker .topbar select {
+        font-size: 11px;
+        padding: 2px 4px;
+      }
+      .sticker img {
+        object-fit: contain;
+        margin: 0;
+      }
+      .caption {
+        margin-top: 2mm;
+        font-size: 11px;
+        text-align: center;
+        color: #333;
+        line-height: 1.2;
+        width: 100%;
+      }
+      .empty-tip {
+        color: #666;
+        text-align: center;
+        padding: 24px 12px;
+        font-size: 14px;
+      }
+      .size-readout {
+        font-size: 12px;
+        color: #333;
+        display: grid;
+        grid-template-columns: repeat(4, auto);
+        gap: 12px;
+        align-items: center;
+      }
+
+      /* File list UI (click to remove) */
+      .file-list {
+        font-size: 12px;
+        color: #333;
+        margin-top: 6px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .file-list .file-item {
+        background: #fff;
+        border: 1px solid #ddd;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .file-list .file-item:hover {
+        background: #f0f6ff;
+        border-color: #cfe0ff;
+      }
+
+      /* Print tweaks */
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      @media print {
+        header {
+          display: none !important;
+        }
+        body {
+          background: white;
+        }
+        .sheet {
+          box-shadow: none;
+          margin: 0;
+          padding: var(--sheet-margin);
+          break-after: page;
+        }
+        .sheet:last-child {
+          break-after: auto;
+        }
+        .sticker .topbar {
+          display: none;
+        }
+        .sheet-title {
+          top: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <!-- App header: builder-facing name + version -->
+      <h1 id="appHeader">Parts Checklist — v0.10</h1>
+
+      <div class="controls">
+        <!-- File input + file list (file list sits under the upload control) -->
+        <div>
+          <label>
+            CSV files:
+            <input id="csvInput" type="file" accept=".csv" multiple />
+          </label>
+          <div class="file-list" id="fileList" aria-live="polite"></div>
+        </div>
+
+        <!-- Other controls -->
+        <div style="display: grid; gap: 6px">
+          <label
+            ><input id="repeatByQty" type="checkbox" checked /> Repeat by
+            quantity</label
+          >
+          <label
+            ><input id="showCaptions" type="checkbox" /> Show captions</label
+          >
+
+          <label>
+            Columns across page:
+            <input
+              id="colsSlider"
+              type="range"
+              min="4"
+              max="12"
+              step="1"
+              value="8" />
+            <span id="colsVal">8 columns</span>
+          </label>
+
+          <div class="size-readout">
+            <span><strong>1×1:</strong> <span id="size1">—</span></span>
+            <span><strong>2×2:</strong> <span id="size2">—</span></span>
+            <span><strong>3×3:</strong> <span id="size3">—</span></span>
+            <span><strong>4×4:</strong> <span id="size4">—</span></span>
+          </div>
+
+          <label>
+            Image scale:
+            <input
+              id="imgScale"
+              type="range"
+              min="10"
+              max="100"
+              step="10"
+              value="40" />
+            <span id="imgScaleVal">40%</span>
+          </label>
+        </div>
+
+        <div>
+          <button id="printBtn">Print A4</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="pages">
+      <!-- initial empty sheet -->
+      <div class="sheet">
+        <div class="sheet-title">
+          <span class="sheet-title-inner">No file loaded</span>
+        </div>
+        <div class="grid">
+          <div class="empty-tip">
+            Import one or more CSV files to see images laid out for printing.
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      /* ==========================================================================
+   Parts Checklist v0.10
+   - Multi-CSV merge (select multiple CSVs)
+   - File list under upload; click a filename to remove it
+   - Smart initial scale detection from name (NxM patterns)
+   - Image scale control (10%..100% in steps of 10)
+   - Columns default 8, image scale default 40%
+   - Comments throughout for easy future fixes
+   ========================================================================== */
+
+      /* -------------------------
+   App metadata (single source of truth)
+   ------------------------- */
+      const APP_NAME = "Parts Checklist";
+      let APP_VERSION = "0.10";
+
+      /* Update header text to include version */
+      document.getElementById(
+        "appHeader"
+      ).textContent = `${APP_NAME} — v${APP_VERSION}`;
+
+      /* -------------------------
+   DOM references
+   ------------------------- */
+      const csvInput = document.getElementById("csvInput");
+      const fileListEl = document.getElementById("fileList");
+      const repeatByQtyInput = document.getElementById("repeatByQty");
+      const showCaptionsInput = document.getElementById("showCaptions");
+      const colsSlider = document.getElementById("colsSlider");
+      const colsVal = document.getElementById("colsVal");
+      const printBtn = document.getElementById("printBtn");
+      const pages = document.getElementById("pages");
+      const size1El = document.getElementById("size1");
+      const size2El = document.getElementById("size2");
+      const size3El = document.getElementById("size3");
+      const size4El = document.getElementById("size4");
+      const imgScaleEl = document.getElementById("imgScale");
+      const imgScaleVal = document.getElementById("imgScaleVal");
+
+      /* -------------------------
+   Internal state
+   ------------------------- */
+      let currentItems = []; // parsed rows from merged CSVs
+      let stickers = []; // expanded list (respecting repeat-by-quantity)
+      let loadedFiles = []; // File objects selected by user
+      let sheetTitleName = ""; // joined CSV filenames for printed sheet titles
+
+      /* ==========================================================================
+   CSV parsing helpers
+   - splitCSVLine: basic CSV line splitter that respects quoted fields
+   - normalizeImagePath: convert short paths to lego CDN URL if needed
+   - legoURL: helper to build lego image URL
+   ========================================================================== */
+
+      /**
+       * Split a CSV line into columns.
+       * - Handles quoted fields with double quotes and escaped quotes ("").
+       * - Returns trimmed strings with surrounding quotes removed.
+       */
+      function splitCSVLine(line) {
+        const out = [];
+        let cur = "";
+        let quoted = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            // handle escaped double quotes inside quoted field
+            if (quoted && line[i + 1] === '"') {
+              cur += '"';
+              i++;
+            } else quoted = !quoted;
+          } else if (ch === "," && !quoted) {
+            out.push(cur);
+            cur = "";
+          } else {
+            cur += ch;
+          }
+        }
+        out.push(cur);
+        // trim and remove surrounding quotes if any
+        return out.map((s) => s.trim().replace(/^"|"$/g, ""));
+      }
+
+      /**
+       * If the CSV image column is a short path (like blt.../12345.jpg),
+       * convert it to the LEGO CDN photoreal URL. If it's already an http(s) URL,
+       * return it unchanged. If empty, fall back to legoURL(elementId).
+       */
+      function normalizeImagePath(path, id) {
+        if (!path) return legoURL(id);
+        if (path.startsWith("http")) return path;
+        let f = path.split("/").pop();
+        if (!f.toLowerCase().endsWith(".jpg")) f += ".jpg";
+        return legoURL(f);
+      }
+
+      /** Build a LEGO CDN image URL for a given element id or filename. */
+      function legoURL(name) {
+        return `https://www.lego.com/cdn/product-assets/element.img.photoreal.192x192/${name}.jpg`;
+      }
+
+      /* ==========================================================================
+   Scale detection
+   - We only use the size found in the name (ignore quantity for scale)
+   - We find all NxM patterns and use the largest stud count
+   - studsToScale maps stud counts into the 1..4 buckets:
+       1-2 => 1, 3-4 => 2, 5-6 => 3, 7+ => 4
+   ========================================================================== */
+
+      /** Map studs (numeric) to grid scale buckets. */
+      function studsToScale(studs) {
+        const n = parseInt(studs, 10) || 1;
+        if (n <= 2) return 1;
+        if (n <= 4) return 2;
+        if (n <= 6) return 3;
+        return 4;
+      }
+
+      /**
+       * Detect initial scale strictly from the name.
+       * - Finds all NxM patterns (e.g., "1x2", "2X4", "2×2") and uses the largest stud count.
+       * - Returns 1..4. Defaults to 1 when no size is found.
+       */
+      function detectInitialScale(name) {
+        if (!name) return 1;
+        const re = /(\d+)\s*[x×X]\s*(\d+)/g;
+        let match;
+        let maxDim = 0;
+        while ((match = re.exec(name)) !== null) {
+          const a = parseInt(match[1], 10);
+          const b = parseInt(match[2], 10);
+          if (!isNaN(a)) maxDim = Math.max(maxDim, a);
+          if (!isNaN(b)) maxDim = Math.max(maxDim, b);
+        }
+        if (maxDim > 0) return studsToScale(maxDim);
+        return 1;
+      }
+
+      /* ==========================================================================
+   CSV parsing and merging
+   - parseCSV: parse a single CSV text into an array of item objects
+   - readAndMergeFilesAndRender: read all loadedFiles, parse them, merge into currentItems
+   ========================================================================== */
+
+      /**
+       * Parse CSV text into an array of objects:
+       * { name, elementId, quantity, image, scale }
+       *
+       * This parser assumes the last three columns are elementId, quantity, image,
+       * and everything before them is the name (re-joined with commas). This makes
+       * the parser tolerant of unquoted commas inside the name field.
+       */
+      function parseCSV(text) {
+        const lines = text.split(/\r?\n/).filter((l) => l.trim());
+        if (!lines.length) return [];
+
+        // header detection (kept for compatibility but not strictly required)
+        const header = splitCSVLine(lines[0]).map((h) => h.toLowerCase());
+
+        return lines.slice(1).map((line) => {
+          const cols = splitCSVLine(line);
+          // ensure at least 4 columns; pad if necessary
+          if (cols.length < 4) {
+            while (cols.length < 4) cols.push("");
+          }
+
+          // last three columns: elementId, quantity, image
+          const image = cols[cols.length - 1].trim();
+          const quantityRaw = cols[cols.length - 2].trim();
+          const elementId = cols[cols.length - 3].trim();
+          // name is everything before those three columns (re-join with commas)
+          const nameParts = cols.slice(0, cols.length - 3);
+          const name = nameParts.join(",").trim();
+
+          const qty = parseInt(quantityRaw, 10) || 1;
+          const detectedScale = detectInitialScale(name);
+
+          return {
+            name: name || "",
+            elementId: elementId,
+            quantity: qty,
+            image: normalizeImagePath(image, elementId),
+            scale: detectedScale,
+          };
+        });
+      }
+
+      /**
+       * Read all files currently in loadedFiles, parse them, merge rows preserving order,
+       * then expand into the stickers array (respecting repeat-by-quantity).
+       *
+       * This function is the single source of truth for merging multiple CSVs.
+       */
+      function readAndMergeFilesAndRender() {
+        // If no files, clear state and render empty
+        if (!loadedFiles.length) {
+          currentItems = [];
+          stickers = [];
+          sheetTitleName = "";
+          renderFileList();
+          buildStickers();
+          return;
+        }
+
+        // Update the sheet title to the joined filenames
+        sheetTitleName = loadedFiles.map((f) => f.name).join(" + ");
+        renderFileList();
+
+        // Read all files as text in parallel
+        const readers = loadedFiles.map(
+          (f) =>
+            new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = (e) =>
+                resolve({ name: f.name, text: String(e.target.result) });
+              r.onerror = () => reject(new Error("Failed to read " + f.name));
+              r.readAsText(f);
+            })
+        );
+
+        Promise.all(readers)
+          .then((results) => {
+            // Merge parsed rows from all files (preserve file order)
+            currentItems = [];
+            results.forEach((res) => {
+              const parsed = parseCSV(res.text);
+              currentItems.push(...parsed);
+            });
+
+            // Build stickers array from merged currentItems
+            stickers = [];
+            currentItems.forEach((it) => {
+              const count = repeatByQtyInput.checked
+                ? Math.max(it.quantity, 1)
+                : 1;
+              for (let i = 0; i < count; i++) stickers.push({ ...it });
+            });
+
+            buildStickers();
+          })
+          .catch((err) => {
+            console.error(err);
+            alert("Error reading files: " + err.message);
+          });
+      }
+
+      /* ==========================================================================
+   File list UI
+   - renderFileList: show loadedFiles under the upload control
+   - clicking a file removes it from loadedFiles and re-merges
+   ========================================================================== */
+
+      /** Render the clickable file list under the upload control. */
+      function renderFileList() {
+        fileListEl.innerHTML = "";
+
+        // If no files, show placeholder
+        if (!loadedFiles.length) {
+          const placeholder = document.createElement("div");
+          placeholder.className = "file-item";
+          placeholder.textContent = "No files";
+          placeholder.style.opacity = "0.6";
+          fileListEl.appendChild(placeholder);
+          return;
+        }
+
+        // Create a clickable item for each loaded file
+        loadedFiles.forEach((f, idx) => {
+          const el = document.createElement("div");
+          el.className = "file-item";
+          el.textContent = f.name;
+          el.title = "Click to remove this file";
+          el.dataset.index = String(idx);
+
+          // Click handler removes the file and re-merges
+          el.addEventListener("click", () => {
+            // Remove the file at index idx
+            loadedFiles.splice(idx, 1);
+            // Recompute title and re-render everything
+            readAndMergeFilesAndRender();
+          });
+
+          fileListEl.appendChild(el);
+        });
+      }
+
+      /* ==========================================================================
+   Grid packing and rendering
+   - applyColumnsSetting: compute cell size from columns slider (gap-free)
+   - buildStickers: pack stickers into sheets and render DOM
+   - renderStickerCard: create DOM for a single sticker
+   ========================================================================== */
+
+      /** Helper: round to 2 decimals for mm readouts */
+      function round2(v) {
+        return Math.round(v * 100) / 100;
+      }
+
+      /**
+       * Compute usable page metrics and set CSS vars for sticker size.
+       * The slider controls integer columns across the usable width; cellSize = usableW / columns.
+       * We clamp columns so that a 4x4 sticker can always fit (cellSize <= usableW/4 and usableH/4).
+       */
+      function getPageMetrics() {
+        const margin =
+          parseFloat(
+            getComputedStyle(document.documentElement).getPropertyValue(
+              "--sheet-margin"
+            )
+          ) || 10;
+        const usableW = 210 - 2 * margin;
+        const usableH = 297 - 2 * margin;
+        return { margin, usableW, usableH };
+      }
+
+      function applyColumnsSetting() {
+        const { usableW, usableH } = getPageMetrics();
+        let columns = parseInt(colsSlider.value, 10);
+
+        // Ensure a 4x4 sticker can fit by increasing columns if needed
+        const maxCellSizeFor4x4 = Math.min(usableW / 4, usableH / 4);
+        while (usableW / columns > maxCellSizeFor4x4) columns += 1;
+
+        // enforce minimum and reasonable maximum
+        columns = Math.max(columns, 4);
+        const maxColumns = Math.min(50, Math.floor(usableW / 10)); // avoid <10mm cells
+        columns = Math.min(columns, Math.max(4, maxColumns));
+
+        // update slider UI to reflect clamped values
+        colsSlider.min = "4";
+        colsSlider.max = String(Math.max(4, maxColumns));
+        colsSlider.step = "1";
+        colsSlider.value = String(columns);
+        colsVal.textContent = `${columns} columns`;
+
+        // compute cell size and set CSS vars
+        const cellSize = usableW / columns;
+        document.documentElement.style.setProperty(
+          "--sticker-width",
+          cellSize + "mm"
+        );
+        document.documentElement.style.setProperty(
+          "--sticker-height",
+          cellSize + "mm"
+        );
+        document.documentElement.style.setProperty(
+          "--img-size",
+          cellSize * 0.25 + "mm"
+        );
+
+        // update readouts for 1x1..4x4
+        size1El.textContent = `${round2(cellSize)} mm`;
+        size2El.textContent = `${round2(2 * cellSize)} mm`;
+        size3El.textContent = `${round2(3 * cellSize)} mm`;
+        size4El.textContent = `${round2(4 * cellSize)} mm`;
+
+        return { cellSize, columns };
+      }
+
+      /** Create an empty occupancy grid (rows x cols) */
+      function createEmptyGrid(rows, cols) {
+        return Array.from({ length: rows }, () => Array(cols).fill(false));
+      }
+
+      /** Check if a block of wSpan x hSpan is available at (row,col) */
+      function blockAvailable(grid, row, col, wSpan, hSpan) {
+        if (row + hSpan > grid.length || col + wSpan > grid[0].length)
+          return false;
+        for (let r = row; r < row + hSpan; r++) {
+          for (let c = col; c < col + wSpan; c++) {
+            if (grid[r][c]) return false;
+          }
+        }
+        return true;
+      }
+
+      /** Mark a block as occupied in the grid */
+      function markBlockOccupied(grid, row, col, wSpan, hSpan) {
+        for (let r = row; r < row + hSpan; r++) {
+          for (let c = col; c < col + wSpan; c++) {
+            grid[r][c] = true;
+          }
+        }
+      }
+
+      /**
+       * Build and render sticker sheets.
+       * - Packs stickers gap-free across the page width using the computed cell size.
+       * - Opens new sheets as needed.
+       * - Adds the sheet title (sheetTitleName) to each sheet (joined CSV filenames).
+       */
+      function buildStickers() {
+        pages.innerHTML = "";
+
+        // If no stickers, render an empty sheet with title
+        if (!stickers.length) {
+          const titleText = sheetTitleName || `${APP_NAME} — v${APP_VERSION}`;
+          pages.innerHTML = `<div class="sheet"><div class="sheet-title"><span class="sheet-title-inner">${escapeHtml(
+            titleText
+          )}</span></div><div class="grid"><div class="empty-tip">No stickers to display.</div></div></div>`;
+          return;
+        }
+
+        // Compute layout metrics
+        const { usableW, usableH } = getPageMetrics();
+        const { cellSize, columns } = applyColumnsSetting();
+
+        // grid dimensions (cols from slider, rows computed from usable height)
+        const cols = Math.max(4, columns);
+        const rows = Math.max(4, Math.floor(usableH / cellSize));
+
+        // Prepare first sheet
+        let sheet = document.createElement("div");
+        sheet.className = "sheet";
+
+        // Add title element to sheet (use joined CSV filenames if available)
+        const titleText = sheetTitleName || `${APP_NAME} — v${APP_VERSION}`;
+        const titleEl = document.createElement("div");
+        titleEl.className = "sheet-title";
+        titleEl.innerHTML = `<span class="sheet-title-inner">${escapeHtml(
+          titleText
+        )}</span>`;
+        sheet.appendChild(titleEl);
+
+        let gridEl = document.createElement("div");
+        gridEl.className = "grid";
+        let grid = createEmptyGrid(rows, cols);
+
+        // Sort stickers by descending scale to reduce fragmentation
+        const sortedStickers = [...stickers].sort((a, b) => b.scale - a.scale);
+
+        // Place each sticker into the grid(s)
+        for (let i = 0; i < sortedStickers.length; i++) {
+          const s = sortedStickers[i];
+          const span = Math.min(4, Math.max(1, s.scale)); // clamp 1..4
+          const wSpan = span,
+            hSpan = span;
+          let placed = false;
+
+          // Try to place on current sheet
+          for (let r = 0; r <= rows - hSpan && !placed; r++) {
+            for (let c = 0; c <= cols - wSpan && !placed; c++) {
+              if (blockAvailable(grid, r, c, wSpan, hSpan)) {
+                markBlockOccupied(grid, r, c, wSpan, hSpan);
+                placed = true;
+
+                const card = renderStickerCard(s, wSpan, hSpan, cellSize);
+                card.style.left = c * cellSize + "mm";
+                card.style.top = r * cellSize + "mm";
+                gridEl.appendChild(card);
+              }
+            }
+          }
+
+          // If not placed, finalize current sheet and start a new one
+          if (!placed) {
+            sheet.appendChild(gridEl);
+            pages.appendChild(sheet);
+
+            sheet = document.createElement("div");
+            sheet.className = "sheet";
+            const titleEl2 = document.createElement("div");
+            titleEl2.className = "sheet-title";
+            titleEl2.innerHTML = `<span class="sheet-title-inner">${escapeHtml(
+              titleText
+            )}</span>`;
+            sheet.appendChild(titleEl2);
+
+            gridEl = document.createElement("div");
+            gridEl.className = "grid";
+            grid = createEmptyGrid(rows, cols);
+
+            // Try placing again on the new sheet
+            for (let r = 0; r <= rows - hSpan && !placed; r++) {
+              for (let c = 0; c <= cols - wSpan && !placed; c++) {
+                if (blockAvailable(grid, r, c, wSpan, hSpan)) {
+                  markBlockOccupied(grid, r, c, wSpan, hSpan);
+                  placed = true;
+
+                  const card = renderStickerCard(s, wSpan, hSpan, cellSize);
+                  card.style.left = c * cellSize + "mm";
+                  card.style.top = r * cellSize + "mm";
+                  gridEl.appendChild(card);
+                }
+              }
+            }
+
+            if (!placed) {
+              // If still not placed, skip and warn (shouldn't happen with current constraints)
+              console.warn("Sticker skipped (does not fit grid):", s);
+            }
+          }
+        }
+
+        // Append last sheet
+        sheet.appendChild(gridEl);
+        pages.appendChild(sheet);
+      }
+
+      /**
+       * Create DOM for a single sticker card.
+       * - includes a scale selector (1..4) that re-packs when changed
+       * - image size is controlled by the imgScale slider (percentage of card)
+       */
+      function renderStickerCard(s, wSpan, hSpan, cellSize) {
+        const card = document.createElement("div");
+        card.className = "sticker";
+        card.style.width = wSpan * cellSize + "mm";
+        card.style.height = hSpan * cellSize + "mm";
+
+        // topbar with scale selector
+        const topbar = document.createElement("div");
+        topbar.className = "topbar";
+        const sel = document.createElement("select");
+        [1, 2, 3, 4].forEach((v) => {
+          const opt = document.createElement("option");
+          opt.value = String(v);
+          opt.textContent = `${v}×${v}`;
+          sel.appendChild(opt);
+        });
+        sel.value = String(Math.min(4, Math.max(1, s.scale)));
+        sel.title = "Sticker size in grid cells";
+        sel.addEventListener("change", () => {
+          s.scale = parseInt(sel.value, 10);
+          buildStickers(); // re-pack when user changes scale
+        });
+        topbar.appendChild(sel);
+        card.appendChild(topbar);
+
+        // image element
+        const img = document.createElement("img");
+        img.src = s.image;
+        img.alt = s.name || s.elementId;
+        img.onerror = () => (img.src = legoURL(s.elementId));
+
+        // image sizing: percentage of the sticker card (controlled by imgScale slider)
+        const imgScale = (parseInt(imgScaleEl.value, 10) || 40) / 100;
+        img.style.width = wSpan * cellSize * imgScale + "mm";
+        img.style.height = hSpan * cellSize * imgScale + "mm";
+        card.appendChild(img);
+
+        // optional caption
+        if (showCaptionsInput.checked) {
+          const cap = document.createElement("div");
+          cap.className = "caption";
+          cap.innerHTML = `${escapeHtml(s.name || "Unknown")}<br>${escapeHtml(
+            s.elementId
+          )}`;
+          card.appendChild(cap);
+        }
+
+        return card;
+      }
+
+      /* ==========================================================================
+   Utilities
+   ========================================================================== */
+
+      /** Escape HTML for safe insertion into innerHTML */
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      /* ==========================================================================
+   Event wiring
+   - file input: add selected files to loadedFiles (avoid duplicates by name)
+   - clicking file list items removes that file
+   - sliders and checkboxes re-render as needed
+   ========================================================================== */
+
+      /**
+       * When the file input changes, add the selected files to our managed loadedFiles array.
+       * We avoid duplicates by filename. After updating loadedFiles we re-merge and render.
+       */
+      csvInput.addEventListener("change", (ev) => {
+        const selected = Array.from(ev.target.files || []);
+        // Add new files, skip duplicates by name
+        selected.forEach((f) => {
+          if (!loadedFiles.some((existing) => existing.name === f.name)) {
+            loadedFiles.push(f);
+          }
+        });
+
+        // Reset the native input so the user can re-select the same file later if needed
+        csvInput.value = "";
+
+        // Re-merge and render
+        readAndMergeFilesAndRender();
+      });
+
+      /**
+       * If the user toggles repeat-by-quantity, rebuild the stickers array and re-render.
+       */
+      repeatByQtyInput.addEventListener("change", () => {
+        // rebuild stickers from currentItems using the new repeat setting
+        stickers = [];
+        currentItems.forEach((it) => {
+          const count = repeatByQtyInput.checked ? Math.max(it.quantity, 1) : 1;
+          for (let i = 0; i < count; i++) stickers.push({ ...it });
+        });
+        buildStickers();
+      });
+
+      /** Show/hide captions and re-render */
+      showCaptionsInput.addEventListener("change", buildStickers);
+
+      /** Columns slider: update layout and re-render */
+      colsSlider.addEventListener("input", () => {
+        applyColumnsSetting();
+        buildStickers();
+      });
+
+      /** Image scale slider: update label and re-render */
+      imgScaleEl.addEventListener("input", () => {
+        imgScaleVal.textContent = imgScaleEl.value + "%";
+        buildStickers();
+      });
+
+      /** Print button */
+      printBtn.addEventListener("click", () => window.print());
+
+      /* ==========================================================================
+   Initialization
+   - set defaults and render initial UI
+   ========================================================================== */
+
+      // Defaults: columns 8, image scale 40%
+      colsSlider.value = "8";
+      imgScaleEl.value = "40";
+      applyColumnsSetting();
+      imgScaleVal.textContent = imgScaleEl.value + "%";
+      renderFileList();
+      buildStickers();
+    </script>
+  </body>
+</html>
